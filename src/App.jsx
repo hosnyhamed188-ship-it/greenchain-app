@@ -1412,6 +1412,104 @@ function SettingsPage(){
 }
 
 // ── CARBON CREDITS PAGE ────────────────────────────────────────
+function SettingsPage(){
+  const {t}=useLang();
+  const [saving,setSaving]=useState(false);
+  const [saved,setSaved]=useState(false);
+  const [form,setForm]=useState({
+    companyName:"",industry:"",country:"",email:"",phone:"",
+    scopeTarget:"",offsetBudget:"",
+    emailAlerts:true,penaltyAlerts:true,reportReady:true,
+  });
+  useEffect(()=>{
+    supabase.auth.getUser().then(({data})=>{
+      if(data?.user?.email) setForm(f=>({...f,email:data.user.email}));
+    });
+  },[]);
+  async function handleSave(){
+    setSaving(true);
+    const {data:{user}}=await supabase.auth.getUser();
+    await supabase.from("settings").upsert({
+      user_id:user.id,company_name:form.companyName,industry:form.industry,
+      country:form.country,phone:form.phone,scope_target:form.scopeTarget,
+      offset_budget:form.offsetBudget,email_alerts:form.emailAlerts,
+      penalty_alerts:form.penaltyAlerts,report_ready:form.reportReady,
+    });
+    setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),3000);
+  }
+  const F=({label,field,placeholder,type="text"})=>(
+    <div className="gc-field">
+      <label>{label}</label>
+      <input type={type} value={form[field]} placeholder={placeholder}
+        onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}/>
+    </div>
+  );
+  const Toggle=({label,desc,field})=>(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+      padding:"12px 0",borderBottom:`1px solid ${T.border}44`}}>
+      <div>
+        <div style={{fontSize:12,fontWeight:600,color:T.textPri}}>{label}</div>
+        <div style={{fontFamily:T.fontMono,fontSize:9,color:T.textMute,marginTop:3}}>{desc}</div>
+      </div>
+      <div onClick={()=>setForm(f=>({...f,[field]:!f[field]}))}
+        style={{width:40,height:22,borderRadius:11,cursor:"pointer",transition:"all .2s",
+          background:form[field]?T.green:T.border,position:"relative",flexShrink:0}}>
+        <div style={{position:"absolute",top:3,left:form[field]?20:3,
+          width:16,height:16,borderRadius:"50%",
+          background:form[field]?"#000":T.textMute,transition:"left .2s"}}/>
+      </div>
+    </div>
+  );
+  return(
+    <>
+      <div className="gc-page-header">
+        <div className="gc-page-eyebrow">MODULE VII · SYSTEM</div>
+        <div className="gc-page-title">Enterprise Configuration</div>
+        <div className="gc-page-meta">Account settings · Notifications · Sustainability targets</div>
+      </div>
+      <div className="gc-grid-2" style={{marginBottom:12}}>
+        <div className="gc-panel">
+          <div className="gc-panel-header">
+            <span className="gc-panel-title">COMPANY PROFILE</span>
+            <span className="gc-panel-badge">ENTERPRISE</span>
+          </div>
+          <div className="gc-panel-body">
+            <F label="Company Name" field="companyName" placeholder="Acme Industrial Corp"/>
+            <F label="Industry" field="industry" placeholder="Steel Manufacturing"/>
+            <F label="Country / Region" field="country" placeholder="Germany — EU"/>
+            <F label="Contact Email" field="email" placeholder="ops@company.com" type="email"/>
+            <F label="Phone" field="phone" placeholder="+49 30 123456"/>
+          </div>
+        </div>
+        <div className="gc-panel">
+          <div className="gc-panel-header">
+            <span className="gc-panel-title">SUSTAINABILITY TARGETS</span>
+            <span className="gc-panel-badge live">ACTIVE</span>
+          </div>
+          <div className="gc-panel-body">
+            <F label="Scope 1+2 Reduction Target (%)" field="scopeTarget" placeholder="e.g. 40"/>
+            <F label="Annual Carbon Offset Budget ($)" field="offsetBudget" placeholder="e.g. 500000"/>
+          </div>
+        </div>
+      </div>
+      <div className="gc-panel" style={{marginBottom:12}}>
+        <div className="gc-panel-header">
+          <span className="gc-panel-title">NOTIFICATION PREFERENCES</span>
+          <span className="gc-panel-badge">3 ACTIVE</span>
+        </div>
+        <div className="gc-panel-body">
+          <Toggle label="Email Alerts" desc="Receive system alerts via email" field="emailAlerts"/>
+          <Toggle label="Penalty Risk Warnings" desc="Alert when penalty probability exceeds 60%" field="penaltyAlerts"/>
+          <Toggle label="Report Ready Notifications" desc="Notify when AI reports are generated" field="reportReady"/>
+        </div>
+      </div>
+      <button className="gc-generate-btn" onClick={handleSave}
+        disabled={saving} style={{maxWidth:400}}>
+        {saving?"SAVING...":(saved?"✓ SAVED SUCCESSFULLY":"SAVE CONFIGURATION")}
+      </button>
+    </>
+  );
+}
 function CarbonCreditsPage(){
   const {t}=useLang();
   return(
