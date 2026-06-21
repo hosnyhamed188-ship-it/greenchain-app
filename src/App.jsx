@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { supabase } from './supabase.js'
+
 // ── THEME ──────────────────────────────────────────────────────
 const T = {
   bg:"#060d0a",surface:"#0a1510",panel:"#0d1a13",border:"#162a1e",borderHi:"#1e4a30",
@@ -842,20 +842,7 @@ function LoginPage({onLogin,lang,setLang}){
   const [pass,setPass]=useState("");
   const [loading,setLoading]=useState(false);
   const token=useTokenAnim(loading);
-  async function handleLogin(){
-  if(!user||!pass)return;
-  setLoading(true);
-  const {data,error} = await supabase.auth.signInWithPassword({
-    email: user,
-    password: pass,
-  });
-  if(error){
-    setLoading(false);
-    alert(error.message);
-  } else {
-    onLogin();
-  }
-}
+  function handleLogin(){if(!user||!pass)return;setLoading(true);setTimeout(()=>onLogin(),2400);}
   return(
     <div className="gc-login" dir={rtl?"rtl":"ltr"}>
       <div className="gc-login-void">
@@ -1308,7 +1295,6 @@ Use professional corporate language. Include specific numbers where relevant. Ke
   );
 }
 
-// ── CARBON CREDITS PAGE ────────────────────────────────────────
 // ── SETTINGS PAGE ─────────────────────────────────────────────
 function SettingsPage(){
   const {t}=useLang();
@@ -1319,45 +1305,29 @@ function SettingsPage(){
     scopeTarget:"",offsetBudget:"",
     emailAlerts:true,penaltyAlerts:true,reportReady:true,
   });
-
   useEffect(()=>{
     supabase.auth.getUser().then(({data})=>{
       if(data?.user?.email) setForm(f=>({...f,email:data.user.email}));
     });
   },[]);
-
   async function handleSave(){
     setSaving(true);
     const {data:{user}}=await supabase.auth.getUser();
     await supabase.from("settings").upsert({
-      user_id:user.id,
-      company_name:form.companyName,
-      industry:form.industry,
-      country:form.country,
-      phone:form.phone,
-      scope_target:form.scopeTarget,
-      offset_budget:form.offsetBudget,
-      email_alerts:form.emailAlerts,
-      penalty_alerts:form.penaltyAlerts,
-      report_ready:form.reportReady,
+      user_id:user.id,company_name:form.companyName,industry:form.industry,
+      country:form.country,phone:form.phone,scope_target:form.scopeTarget,
+      offset_budget:form.offsetBudget,email_alerts:form.emailAlerts,
+      penalty_alerts:form.penaltyAlerts,report_ready:form.reportReady,
     });
-    setSaving(false);
-    setSaved(true);
-    setTimeout(()=>setSaved(false),3000);
+    setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),3000);
   }
-
   const F=({label,field,placeholder,type="text"})=>(
     <div className="gc-field">
       <label>{label}</label>
-      <input
-        type={type}
-        value={form[field]}
-        placeholder={placeholder}
-        onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}
-      />
+      <input type={type} value={form[field]} placeholder={placeholder}
+        onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}/>
     </div>
   );
-
   const Toggle=({label,desc,field})=>(
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
       padding:"12px 0",borderBottom:`1px solid ${T.border}44`}}>
@@ -1365,24 +1335,15 @@ function SettingsPage(){
         <div style={{fontSize:12,fontWeight:600,color:T.textPri}}>{label}</div>
         <div style={{fontFamily:T.fontMono,fontSize:9,color:T.textMute,marginTop:3}}>{desc}</div>
       </div>
-      <div
-        onClick={()=>setForm(f=>({...f,[field]:!f[field]}))}
-        style={{
-          width:40,height:22,borderRadius:11,cursor:"pointer",transition:"all .2s",
-          background:form[field]?T.green:T.border,position:"relative",flexShrink:0,
-        }}
-      >
-        <div style={{
-          position:"absolute",top:3,
-          left:form[field]?20:3,
+      <div onClick={()=>setForm(f=>({...f,[field]:!f[field]}))}
+        style={{width:40,height:22,borderRadius:11,cursor:"pointer",transition:"all .2s",
+          background:form[field]?T.green:T.border,position:"relative",flexShrink:0}}>
+        <div style={{position:"absolute",top:3,left:form[field]?20:3,
           width:16,height:16,borderRadius:"50%",
-          background:form[field]?"#000":T.textMute,
-          transition:"left .2s",
-        }}/>
+          background:form[field]?"#000":T.textMute,transition:"left .2s"}}/>
       </div>
     </div>
   );
-
   return(
     <>
       <div className="gc-page-header">
@@ -1413,17 +1374,14 @@ function SettingsPage(){
             <F label="Scope 1+2 Reduction Target (%)" field="scopeTarget" placeholder="e.g. 40"/>
             <F label="Annual Carbon Offset Budget ($)" field="offsetBudget" placeholder="e.g. 500000"/>
             <div style={{marginTop:16,padding:14,background:T.panel,border:`1px solid ${T.border}`}}>
-              <div style={{fontFamily:T.fontMono,fontSize:8,color:T.textMute,letterSpacing:2,marginBottom:10}}>
-                TARGET PROGRESS
-              </div>
+              <div style={{fontFamily:T.fontMono,fontSize:8,color:T.textMute,letterSpacing:2,marginBottom:10}}>TARGET PROGRESS</div>
               {[
                 {label:"Scope 1 Reduction",pct:62,col:T.green},
                 {label:"Scope 2 Reduction",pct:41,col:T.amber},
                 {label:"Offset Goal",pct:82,col:T.teal},
               ].map((p,i)=>(
                 <div key={i} style={{marginBottom:12}}>
-                  <div style={{display:"flex",justifyContent:"space-between",
-                    fontFamily:T.fontMono,fontSize:9,color:T.textMute,marginBottom:4}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontFamily:T.fontMono,fontSize:9,color:T.textMute,marginBottom:4}}>
                     <span>{p.label}</span><span>{p.pct}%</span>
                   </div>
                   <div className="gc-progress-track">
@@ -1446,17 +1404,15 @@ function SettingsPage(){
           <Toggle label="Report Ready Notifications" desc="Notify when AI reports are generated" field="reportReady"/>
         </div>
       </div>
-      <button
-        className="gc-generate-btn"
-        onClick={handleSave}
-        disabled={saving}
-        style={{maxWidth:400}}
-      >
+      <button className="gc-generate-btn" onClick={handleSave} disabled={saving} style={{maxWidth:400}}>
         {saving?"SAVING...":(saved?"✓ SAVED SUCCESSFULLY":"SAVE CONFIGURATION")}
       </button>
     </>
   );
 }
+
+// ── CARBON CREDITS PAGE ────────────────────────────────────────
+function CarbonCreditsPage(){
   const {t}=useLang();
   return(
     <>
@@ -1585,7 +1541,7 @@ function Shell({onLogout}){
     if(page==="optimizer")return <OptimizerPage/>;
     if(page==="sourcing")return <SourcingPage/>;
     if(page==="reports")return <AIReportsPage/>;
-    if(page==="credits")return <CarbonCreditsPage/>; 
+    if(page==="credits")return <CarbonCreditsPage/>;
     if(page==="settings")return <SettingsPage/>;
     return(
       <div className="gc-empty">
