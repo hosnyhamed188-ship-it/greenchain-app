@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-
+import { supabase } from './supabase.js'
 // ── THEME ──────────────────────────────────────────────────────
 const T = {
   bg:"#060d0a",surface:"#0a1510",panel:"#0d1a13",border:"#162a1e",borderHi:"#1e4a30",
