@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef, createContext, useContext } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef, createContext, useContext, useMemo } from "react";
 import { supabase } from './supabase.js'
 // ── THEME ──────────────────────────────────────────────────────
 const T = {
@@ -789,7 +788,8 @@ function BioNet(){
 }
 
 function Sparkline({up}){
-  const pts=Array.from({length:8},()=>Math.random()*16+4);
+  // eslint-disable-next-line react-hooks/purity
+  const pts=useMemo(()=>Array.from({length:8},()=>Math.random()*16+4),[]);
   const W=56,H=22,xs=pts.map((_,i)=>(i/(pts.length-1))*W);
   const mn=Math.min(...pts),mx=Math.max(...pts);
   const ys=pts.map(v=>H-((v-mn)/(mx-mn+.01))*(H-4)-2);
@@ -800,7 +800,9 @@ function Sparkline({up}){
 function useTokenAnim(run){
   const [text,setText]=useState("");
   useEffect(()=>{
-    if(!run){setText("");return;}
+    if(!run){return;}
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setText("");
     const str="GC-AUTH > HANDSHAKE-INIT... TOKEN: 8F3A-C91D-2E7B-5048";
     let i=0;
     const iv=setInterval(()=>{setText(str.slice(0,i));i++;if(i>str.length)clearInterval(iv);},30);
@@ -1214,7 +1216,7 @@ Use professional corporate language. Include specific numbers where relevant. Ke
       const text=data.content?.map(c=>c.text||"").join("")||"Report generation failed.";
       setOutput(text);
       setStatus("done");
-    }catch(e){
+    }catch{
       setOutput("Error connecting to AI engine. Please check your network connection.");
       setStatus("done");
     }
@@ -1296,8 +1298,32 @@ Use professional corporate language. Include specific numbers where relevant. Ke
 }
 
 // ── SETTINGS PAGE ─────────────────────────────────────────────
+const SettingsFormField=({label,field,placeholder,type="text",form,setForm})=>(
+  <div className="gc-field">
+    <label>{label}</label>
+    <input type={type} value={form[field]} placeholder={placeholder}
+      onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}/>
+  </div>
+);
+
+const SettingsToggle=({label,desc,field,form,setForm})=>(
+  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+    padding:"12px 0",borderBottom:`1px solid ${T.border}44`}}>
+    <div>
+      <div style={{fontSize:12,fontWeight:600,color:T.textPri}}>{label}</div>
+      <div style={{fontFamily:T.fontMono,fontSize:9,color:T.textMute,marginTop:3}}>{desc}</div>
+    </div>
+    <div onClick={()=>setForm(f=>({...f,[field]:!f[field]}))}
+      style={{width:40,height:22,borderRadius:11,cursor:"pointer",transition:"all .2s",
+        background:form[field]?T.green:T.border,position:"relative",flexShrink:0}}>
+      <div style={{position:"absolute",top:3,left:form[field]?20:3,
+        width:16,height:16,borderRadius:"50%",
+        background:form[field]?"#000":T.textMute,transition:"left .2s"}}/>
+    </div>
+  </div>
+);
+
 function SettingsPage(){
-  const {t}=useLang();
   const [saving,setSaving]=useState(false);
   const [saved,setSaved]=useState(false);
   const [form,setForm]=useState({
@@ -1321,29 +1347,6 @@ function SettingsPage(){
     });
     setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),3000);
   }
-  const F=({label,field,placeholder,type="text"})=>(
-    <div className="gc-field">
-      <label>{label}</label>
-      <input type={type} value={form[field]} placeholder={placeholder}
-        onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}/>
-    </div>
-  );
-  const Toggle=({label,desc,field})=>(
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",
-      padding:"12px 0",borderBottom:`1px solid ${T.border}44`}}>
-      <div>
-        <div style={{fontSize:12,fontWeight:600,color:T.textPri}}>{label}</div>
-        <div style={{fontFamily:T.fontMono,fontSize:9,color:T.textMute,marginTop:3}}>{desc}</div>
-      </div>
-      <div onClick={()=>setForm(f=>({...f,[field]:!f[field]}))}
-        style={{width:40,height:22,borderRadius:11,cursor:"pointer",transition:"all .2s",
-          background:form[field]?T.green:T.border,position:"relative",flexShrink:0}}>
-        <div style={{position:"absolute",top:3,left:form[field]?20:3,
-          width:16,height:16,borderRadius:"50%",
-          background:form[field]?"#000":T.textMute,transition:"left .2s"}}/>
-      </div>
-    </div>
-  );
   return(
     <>
       <div className="gc-page-header">
@@ -1358,11 +1361,11 @@ function SettingsPage(){
             <span className="gc-panel-badge">ENTERPRISE</span>
           </div>
           <div className="gc-panel-body">
-            <F label="Company Name" field="companyName" placeholder="Acme Industrial Corp"/>
-            <F label="Industry" field="industry" placeholder="Steel Manufacturing"/>
-            <F label="Country / Region" field="country" placeholder="Germany — EU"/>
-            <F label="Contact Email" field="email" placeholder="ops@company.com" type="email"/>
-            <F label="Phone" field="phone" placeholder="+49 30 123456"/>
+            <SettingsFormField label="Company Name" field="companyName" placeholder="Acme Industrial Corp" form={form} setForm={setForm}/>
+            <SettingsFormField label="Industry" field="industry" placeholder="Steel Manufacturing" form={form} setForm={setForm}/>
+            <SettingsFormField label="Country / Region" field="country" placeholder="Germany — EU" form={form} setForm={setForm}/>
+            <SettingsFormField label="Contact Email" field="email" placeholder="ops@company.com" type="email" form={form} setForm={setForm}/>
+            <SettingsFormField label="Phone" field="phone" placeholder="+49 30 123456" form={form} setForm={setForm}/>
           </div>
         </div>
         <div className="gc-panel">
@@ -1371,8 +1374,8 @@ function SettingsPage(){
             <span className="gc-panel-badge live">ACTIVE</span>
           </div>
           <div className="gc-panel-body">
-            <F label="Scope 1+2 Reduction Target (%)" field="scopeTarget" placeholder="e.g. 40"/>
-            <F label="Annual Carbon Offset Budget ($)" field="offsetBudget" placeholder="e.g. 500000"/>
+            <SettingsFormField label="Scope 1+2 Reduction Target (%)" field="scopeTarget" placeholder="e.g. 40" form={form} setForm={setForm}/>
+            <SettingsFormField label="Annual Carbon Offset Budget ($)" field="offsetBudget" placeholder="e.g. 500000" form={form} setForm={setForm}/>
             <div style={{marginTop:16,padding:14,background:T.panel,border:`1px solid ${T.border}`}}>
               <div style={{fontFamily:T.fontMono,fontSize:8,color:T.textMute,letterSpacing:2,marginBottom:10}}>TARGET PROGRESS</div>
               {[
@@ -1399,9 +1402,9 @@ function SettingsPage(){
           <span className="gc-panel-badge">3 ACTIVE</span>
         </div>
         <div className="gc-panel-body">
-          <Toggle label="Email Alerts" desc="Receive system alerts via email" field="emailAlerts"/>
-          <Toggle label="Penalty Risk Warnings" desc="Alert when penalty probability exceeds 60%" field="penaltyAlerts"/>
-          <Toggle label="Report Ready Notifications" desc="Notify when AI reports are generated" field="reportReady"/>
+          <SettingsToggle label="Email Alerts" desc="Receive system alerts via email" field="emailAlerts" form={form} setForm={setForm}/>
+          <SettingsToggle label="Penalty Risk Warnings" desc="Alert when penalty probability exceeds 60%" field="penaltyAlerts" form={form} setForm={setForm}/>
+          <SettingsToggle label="Report Ready Notifications" desc="Notify when AI reports are generated" field="reportReady" form={form} setForm={setForm}/>
         </div>
       </div>
       <button className="gc-generate-btn" onClick={handleSave} disabled={saving} style={{maxWidth:400}}>
@@ -1488,19 +1491,18 @@ function CarbonCreditsPage(){
         <div className="gc-panel-body">
           <div className="gc-pricing-grid">
             {PLANS.map((plan,i)=>{
-              const {t:tl}=useLang();
               return(
                 <div key={i} className={`gc-plan${plan.popular?" popular":""}`}>
-                  {plan.popular&&<div className="gc-plan-popular-badge">{tl.mostPopular}</div>}
-                  <div className="gc-plan-name">{tl[plan.key]}</div>
+                  {plan.popular&&<div className="gc-plan-popular-badge">{t.mostPopular}</div>}
+                  <div className="gc-plan-name">{t[plan.key]}</div>
                   <div className="gc-plan-price">{plan.price}</div>
-                  {!plan.noPrice&&<div className="gc-plan-period">{tl.perMonth}</div>}
+                  {!plan.noPrice&&<div className="gc-plan-period">{t.perMonth}</div>}
                   <div className="gc-plan-divider"/>
                   {plan.features.map((f,j)=>(
                     <div key={j} className="gc-plan-feature">{f}</div>
                   ))}
                   <button className="gc-plan-cta">
-                    {plan.noPrice?tl.contactSales:tl.getStarted}
+                    {plan.noPrice?t.contactSales:t.getStarted}
                   </button>
                 </div>
               );
@@ -1658,3 +1660,6 @@ export default function GreenChainApp(){
     </>
   );
 }
+
+// eslint-disable-next-line react-refresh/only-export-components
+export { CARBON_MARKETS, PLANS, Sparkline, T, useLang };
