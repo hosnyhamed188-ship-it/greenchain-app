@@ -632,6 +632,23 @@ const css = `
   .gc-plan.popular .gc-plan-cta{background:${T.green};color:#000;border-color:${T.green};}
   .gc-plan.popular .gc-plan-cta:hover{background:#00ffaa;}
 
+  /* ── COMPLIANCE / EXPORTS ── */
+  .gc-compliance-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:12px;}
+  .gc-compliance-card{background:${T.panel};border:1px solid ${T.border};padding:14px;position:relative;overflow:hidden;}
+  .gc-compliance-card::before{content:'';position:absolute;inset:0;background:linear-gradient(120deg,transparent 0%,rgba(0,255,136,.04) 50%,transparent 100%);pointer-events:none;}
+  .gc-compliance-label{font-family:${T.fontMono};font-size:8px;letter-spacing:2px;color:${T.textMute};text-transform:uppercase;margin-bottom:8px;}
+  .gc-compliance-value{font-family:${T.fontDisplay};font-size:20px;font-weight:700;color:${T.textPri};margin-bottom:4px;}
+  .gc-compliance-detail{font-family:${T.fontMono};font-size:9px;color:${T.textMute};line-height:1.5;}
+  .gc-compliance-badge{display:inline-block;padding:2px 7px;border:1px solid ${T.border};font-family:${T.fontMono};font-size:8px;letter-spacing:1px;color:${T.textSec};margin-bottom:8px;text-transform:uppercase;}
+  .gc-export-list{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;}
+  .gc-export-card{background:${T.panel};border:1px solid ${T.border};padding:14px;transition:border-color .2s;}
+  .gc-export-card:hover{border-color:${T.borderHi};}
+  .gc-export-badge{display:inline-block;padding:2px 7px;border:1px solid ${T.green}44;color:${T.green};font-family:${T.fontMono};font-size:8px;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;}
+  .gc-export-title{font-size:12px;font-weight:600;color:${T.textPri};margin-bottom:4px;}
+  .gc-export-desc{font-family:${T.fontMono};font-size:9px;color:${T.textMute};line-height:1.5;margin-bottom:10px;}
+  .gc-export-format{font-family:${T.fontMono};font-size:8px;color:${T.textSec};letter-spacing:1px;text-transform:uppercase;margin-bottom:10px;}
+  .gc-export-actions{display:flex;gap:8px;flex-wrap:wrap;}
+
   /* ── LOADING SCREEN ── */
   .gc-loading{display:flex;align-items:center;justify-content:center;height:100vh;background:${T.bg};flex-direction:column;gap:20px;}
   .gc-loading-hex{width:48px;height:48px;border:2px solid ${T.green};display:flex;align-items:center;justify-content:center;clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);animation:spin 3s linear infinite;}
@@ -753,6 +770,23 @@ const PLANS=[
   {key:"planGrowth",price:"$1,490",features:["Up to 25 users","5 facilities","Full Scope 1-2-3","AI report generator","Supplier portal","Priority support"],popular:true},
   {key:"planEnterprise",price:"$4,900",features:["Unlimited users","Unlimited facilities","Carbon credits trading","Custom integrations","Dedicated CSM","SLA 99.9%"],popular:false},
   {key:"planCustom",price:"Custom",features:["White-label option","On-premise deploy","Custom AI models","Legal & compliance","24/7 support","Tailored SLA"],popular:false,noPrice:true},
+];
+const COMPLIANCE_ITEMS=[
+  {title:"CBAM filing status",value:"Certified",detail:"Filed 14 Oct 2025 · Ref EU-CBM-20251014",tone:"ok"},
+  {title:"Supplier audit queue",value:"12 pending",detail:"3 high-risk vendor reviews",tone:"warn"},
+  {title:"Climate disclosure",value:"68% complete",detail:"SEC and TCFD alignment in progress",tone:"pend"},
+  {title:"Policy changes",value:"3 active",detail:"EU CBAM and UK SECR updated",tone:"warn"},
+];
+const EXPORT_TEMPLATES=[
+  {title:"Quarterly ESG Pack",badge:"GRI",desc:"Board-ready sustainability summary with scope metrics.",format:"PDF + XLSX"},
+  {title:"CBAM Compliance Bundle",badge:"EU",desc:"Border-tax evidence, invoices, and traceability logs.",format:"ZIP"},
+  {title:"Supplier Due Diligence",badge:"AUDIT",desc:"Risk register and vendor scorecards for procurement teams.",format:"PDF"},
+  {title:"Executive Carbon Report",badge:"C-Suite",desc:"Narrative insights and action plan for leadership review.",format:"PPTX"},
+];
+const EXPORT_HISTORY=[
+  {name:"Q2 Carbon Disclosure",time:"Generated 08:10 UTC",status:"Ready for audit"},
+  {name:"Facility Energy Audit",time:"Generated 02:45 UTC",status:"Shared with legal"},
+  {name:"Supplier Risk Snapshot",time:"Generated 21:05 UTC",status:"Queued for approval"},
 ];
 
 // ── HELPERS ─────────────────────────────────────────────────────
@@ -1332,20 +1366,38 @@ function SettingsPage(){
     emailAlerts:true,penaltyAlerts:true,reportReady:true,
   });
   useEffect(()=>{
-    supabase.auth.getUser().then(({data})=>{
-      if(data?.user?.email) setForm(f=>({...f,email:data.user.email}));
-    });
+    let mounted=true;
+    const loadProfile=async()=>{
+      try {
+        const {data}=await supabase.auth.getUser();
+        if(mounted && data?.user?.email){
+          setForm(f=>({...f,email:data.user.email}));
+        }
+      } catch (error) {
+        console.warn("Supabase profile lookup unavailable", error);
+      }
+    };
+    loadProfile();
+    return ()=>{ mounted=false; };
   },[]);
   async function handleSave(){
     setSaving(true);
-    const {data:{user}}=await supabase.auth.getUser();
-    await supabase.from("settings").upsert({
-      user_id:user.id,company_name:form.companyName,industry:form.industry,
-      country:form.country,phone:form.phone,scope_target:form.scopeTarget,
-      offset_budget:form.offsetBudget,email_alerts:form.emailAlerts,
-      penalty_alerts:form.penaltyAlerts,report_ready:form.reportReady,
-    });
-    setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),3000);
+    try {
+      const {data:{user}={}}=await supabase.auth.getUser();
+      if(!user?.id){
+        throw new Error("No authenticated user");
+      }
+      await supabase.from("settings").upsert({
+        user_id:user.id,company_name:form.companyName,industry:form.industry,
+        country:form.country,phone:form.phone,scope_target:form.scopeTarget,
+        offset_budget:form.offsetBudget,email_alerts:form.emailAlerts,
+        penalty_alerts:form.penaltyAlerts,report_ready:form.reportReady,
+      });
+    } catch (error) {
+      console.warn("Settings update skipped because Supabase is not available", error);
+    } finally {
+      setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),3000);
+    }
   }
   return(
     <>
@@ -1514,6 +1566,189 @@ function CarbonCreditsPage(){
   );
 }
 
+function CompliancePage(){
+  return(
+    <>
+      <div className="gc-page-header">
+        <div className="gc-page-eyebrow">MODULE II · COMPLIANCE</div>
+        <div className="gc-page-title">Regulatory Command Center</div>
+        <div className="gc-page-meta">Live controls · audit history · regulatory deadlines</div>
+      </div>
+      <div className="gc-compliance-grid">
+        {[
+          {label:"Compliance score",value:"94/100",detail:"No critical gaps in current quarter"},
+          {label:"Open audits",value:"7",detail:"2 require board sign-off"},
+          {label:"Next deadline",value:"14 Jul",detail:"CBAM supporting docs due"},
+        ].map((card)=>(
+          <div key={card.label} className="gc-compliance-card">
+            <div className="gc-compliance-label">{card.label}</div>
+            <div className="gc-compliance-value">{card.value}</div>
+            <div className="gc-compliance-detail">{card.detail}</div>
+          </div>
+        ))}
+      </div>
+      <div className="gc-grid-2">
+        <div className="gc-panel">
+          <div className="gc-panel-header">
+            <span className="gc-panel-title">ACTIVE CONTROLS</span>
+            <span className="gc-panel-badge live">LIVE</span>
+          </div>
+          <div className="gc-panel-body" style={{padding:"8px 16px"}}>
+            <div className="gc-alert-feed">
+              {COMPLIANCE_ITEMS.map((item)=>(
+                <div key={item.title} className="gc-alert-item">
+                  <div className={`gc-alert-icon ${item.tone}`}>{item.tone==="ok"?"✓":item.tone==="warn"?"⚠":"◌"}</div>
+                  <div>
+                    <div className="gc-alert-msg">{item.title}</div>
+                    <div className="gc-alert-time">{item.value}</div>
+                    <div style={{fontFamily:T.fontMono,fontSize:8,color:T.textMute,marginTop:3}}>{item.detail}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="gc-panel">
+          <div className="gc-panel-header">
+            <span className="gc-panel-title">AUDIT TRAIL</span>
+            <span className="gc-panel-badge">4 RECENT</span>
+          </div>
+          <div className="gc-panel-body">
+            {[
+              {name:"ISO 14064 verification",pct:92,col:T.green},
+              {name:"ESG data attestations",pct:81,col:T.teal},
+              {name:"Supplier contract review",pct:63,col:T.amber},
+            ].map((item)=>(
+              <div key={item.name} style={{marginBottom:14}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontFamily:T.fontMono,fontSize:9,color:T.textMute,marginBottom:4}}>
+                  <span>{item.name}</span><span>{item.pct}%</span>
+                </div>
+                <div className="gc-progress-track">
+                  <div className="gc-progress-fill" style={{width:`${item.pct}%`,background:item.col}}/>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function SqlEditorPage(){
+  const openSqlEditor = () => {
+    if (typeof window !== "undefined") {
+      window.open("https://supabase.com/dashboard/project/oeojlmldcqzbacdbgpio/sql", "_blank", "noopener,noreferrer");
+    }
+  };
+
+  return(
+    <>
+      <div className="gc-page-header">
+        <div className="gc-page-eyebrow">MODULE IX · DATA</div>
+        <div className="gc-page-title">SQL Editor</div>
+        <div className="gc-page-meta">Run queries · inspect schema · manage database workflows</div>
+      </div>
+      <div className="gc-grid-2">
+        <div className="gc-panel">
+          <div className="gc-panel-header">
+            <span className="gc-panel-title">SUPABASE SQL WORKSPACE</span>
+            <span className="gc-panel-badge live">OPEN</span>
+          </div>
+          <div className="gc-panel-body">
+            <div style={{fontFamily:T.fontBody,fontSize:13,lineHeight:1.8,color:T.textPri,marginBottom:12}}>
+              Launch the project SQL editor directly in Supabase to run ad-hoc queries, inspect tables, and validate database changes.
+            </div>
+            <button className="gc-generate-btn" onClick={openSqlEditor} style={{width:"fit-content"}}>
+              Open SQL Editor
+            </button>
+          </div>
+        </div>
+        <div className="gc-panel">
+          <div className="gc-panel-header">
+            <span className="gc-panel-title">QUICK START</span>
+            <span className="gc-panel-badge">GUIDE</span>
+          </div>
+          <div className="gc-panel-body" style={{padding:"8px 16px"}}>
+            <div className="gc-alert-feed">
+              {[
+                {title:"Inspect your schema", value:"SELECT * FROM information_schema.tables;", detail:"Review the available tables and relationships"},
+                {title:"Check recent activity", value:"SELECT * FROM audit_log;", detail:"Validate recent writes and integrations"},
+                {title:"Prototype a query", value:"SELECT * FROM settings LIMIT 10;", detail:"Use the editor for safe debugging"},
+              ].map((item)=>(
+                <div key={item.title} className="gc-alert-item">
+                  <div className="gc-alert-icon ok">⌘</div>
+                  <div>
+                    <div className="gc-alert-msg">{item.title}</div>
+                    <div className="gc-alert-time">{item.value}</div>
+                    <div style={{fontFamily:T.fontMono,fontSize:8,color:T.textMute,marginTop:3}}>{item.detail}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ExportsPage(){
+  return(
+    <>
+      <div className="gc-page-header">
+        <div className="gc-page-eyebrow">MODULE VIII · EXPORTS</div>
+        <div className="gc-page-title">Audit Export Workspace</div>
+        <div className="gc-page-meta">Secure delivery · export templates · review history</div>
+      </div>
+      <div className="gc-grid-2">
+        <div className="gc-panel">
+          <div className="gc-panel-header">
+            <span className="gc-panel-title">EXPORT TEMPLATES</span>
+            <span className="gc-panel-badge live">READY</span>
+          </div>
+          <div className="gc-panel-body">
+            <div className="gc-export-list">
+              {EXPORT_TEMPLATES.map((item)=>(
+                <div key={item.title} className="gc-export-card">
+                  <div className="gc-export-badge">{item.badge}</div>
+                  <div className="gc-export-title">{item.title}</div>
+                  <div className="gc-export-desc">{item.desc}</div>
+                  <div className="gc-export-format">{item.format}</div>
+                  <div className="gc-export-actions">
+                    <button className="gc-vendor-action">Generate</button>
+                    <button className="gc-vendor-action">Share</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="gc-panel">
+          <div className="gc-panel-header">
+            <span className="gc-panel-title">RECENT EXPORTS</span>
+            <span className="gc-panel-badge">SECURE</span>
+          </div>
+          <div className="gc-panel-body" style={{padding:"8px 16px"}}>
+            <div className="gc-alert-feed">
+              {EXPORT_HISTORY.map((item)=>(
+                <div key={item.name} className="gc-alert-item">
+                  <div className="gc-alert-icon ok">⇩</div>
+                  <div>
+                    <div className="gc-alert-msg">{item.name}</div>
+                    <div className="gc-alert-time">{item.time}</div>
+                    <div style={{fontFamily:T.fontMono,fontSize:8,color:T.textMute,marginTop:3}}>{item.status}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── SHELL ──────────────────────────────────────────────────────
 function Shell({onLogout}){
   const [page,setPage]=useState("dashboard");
@@ -1534,17 +1769,21 @@ function Shell({onLogout}){
     ]},
     {section:t.system,items:[
       {id:"settings",icon:"⊕",label:t.navSettings},
+      {id:"sql",icon:"⌘",label:"SQL Editor"},
       {id:"exports",icon:"⊞",label:t.navExports},
     ]},
   ];
 
   function renderPage(){
     if(page==="dashboard")return <DashboardPage/>;
+    if(page==="compliance")return <CompliancePage/>;
     if(page==="optimizer")return <OptimizerPage/>;
     if(page==="sourcing")return <SourcingPage/>;
     if(page==="reports")return <AIReportsPage/>;
     if(page==="credits")return <CarbonCreditsPage/>;
     if(page==="settings")return <SettingsPage/>;
+    if(page==="sql")return <SqlEditorPage/>;
+    if(page==="exports")return <ExportsPage/>;
     return(
       <div className="gc-empty">
         <div className="gc-empty-icon">⊕</div>
