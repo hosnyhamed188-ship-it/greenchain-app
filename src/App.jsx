@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, createContext, useContext, useMemo } from "react";
-import { supabase } from './supabase.js'
+import { supabase, isSupabaseConfigured } from './supabase.js'
 // ── THEME ──────────────────────────────────────────────────────
 const T = {
   bg:"#060d0a",surface:"#0a1510",panel:"#0d1a13",border:"#162a1e",borderHi:"#1e4a30",
@@ -1323,28 +1323,58 @@ const SettingsToggle=({label,desc,field,form,setForm})=>(
   </div>
 );
 
+const getSupabaseSqlEditorUrl = () => {
+  const projectRef = import.meta.env.VITE_SUPABASE_URL?.trim()?.match(/^https?:\/\/([^.]+)\.supabase\.co/);
+  return projectRef ? `https://app.supabase.com/project/${projectRef[1]}/sql` : "https://app.supabase.com/";
+};
+
 function SettingsPage(){
+  const initialError = !isSupabaseConfigured
+    ? 'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in a root .env file.'
+    : "";
   const [saving,setSaving]=useState(false);
   const [saved,setSaved]=useState(false);
+  const [error,setError]=useState(initialError);
   const [form,setForm]=useState({
     companyName:"",industry:"",country:"",email:"",phone:"",
     scopeTarget:"",offsetBudget:"",
     emailAlerts:true,penaltyAlerts:true,reportReady:true,
   });
   useEffect(()=>{
-    supabase.auth.getUser().then(({data})=>{
-      if(data?.user?.email) setForm(f=>({...f,email:data.user.email}));
+    if(!isSupabaseConfigured) return;
+    supabase.auth.getUser().then(({data,error})=>{
+      if(error || !data?.user){
+        setError('Supabase auth is unavailable. Ensure a user session exists or configure auth.');
+        return;
+      }
+      if(data.user.email) setForm(f=>({...f,email:data.user.email}));
     });
   },[]);
   async function handleSave(){
     setSaving(true);
-    const {data:{user}}=await supabase.auth.getUser();
-    await supabase.from("settings").upsert({
+    setError("");
+    if(!isSupabaseConfigured){
+      setError('Supabase is not configured. Unable to save settings.');
+      setSaving(false);
+      return;
+    }
+    const {data:{user},error:userError} = await supabase.auth.getUser();
+    if(userError || !user){
+      setError('Unable to determine current user. Ensure Supabase auth is available.');
+      setSaving(false);
+      return;
+    }
+    const {error: upsertError} = await supabase.from("settings").upsert({
       user_id:user.id,company_name:form.companyName,industry:form.industry,
       country:form.country,phone:form.phone,scope_target:form.scopeTarget,
       offset_budget:form.offsetBudget,email_alerts:form.emailAlerts,
       penalty_alerts:form.penaltyAlerts,report_ready:form.reportReady,
     });
+    if(upsertError){
+      setError(upsertError.message || 'Failed to save settings.');
+      setSaving(false);
+      return;
+    }
     setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),3000);
   }
   return(
@@ -1407,9 +1437,50 @@ function SettingsPage(){
           <SettingsToggle label="Report Ready Notifications" desc="Notify when AI reports are generated" field="reportReady" form={form} setForm={setForm}/>
         </div>
       </div>
-      <button className="gc-generate-btn" onClick={handleSave} disabled={saving} style={{maxWidth:400}}>
+      {error && (
+        <div style={{marginBottom:12,fontFamily:T.fontMono,fontSize:11,color:T.red}}>
+          {error}
+        </div>
+      )}
+      <button className="gc-generate-btn" onClick={handleSave} disabled={saving || !!error || !isSupabaseConfigured} style={{maxWidth:400}}>
         {saving?"SAVING...":(saved?"✓ SAVED SUCCESSFULLY":"SAVE CONFIGURATION")}
       </button>
+    </>
+  );
+}
+
+function SqlEditorPage(){
+  const sqlEditorUrl = getSupabaseSqlEditorUrl();
+  return(
+    <>
+      <div className="gc-page-header">
+        <div className="gc-page-eyebrow">MODULE VII · DATABASE</div>
+        <div className="gc-page-title">Supabase SQL Editor</div>
+        <div className="gc-page-meta">Open your Supabase project SQL editor and run migrations in a safe project workspace.</div>
+      </div>
+      <div className="gc-panel">
+        <div className="gc-panel-header">
+          <span className="gc-panel-title">SQL ACCESS</span>
+          <span className="gc-panel-badge">{isSupabaseConfigured?"CONNECTED":"DISABLED"}</span>
+        </div>
+        <div className="gc-panel-body">
+          {isSupabaseConfigured ? (
+            <>
+              <div style={{fontFamily:T.fontMono,fontSize:12,color:T.textMute,marginBottom:18}}>
+                Use the Supabase SQL editor to run schema migrations such as <code>migrate-settings-table.sql</code>. This page provides quick access to your project SQL workspace.
+              </div>
+              <button className="gc-generate-btn" onClick={()=>window.open(sqlEditorUrl,"_blank")}>Open Supabase SQL Editor</button>
+              <div style={{marginTop:16,fontFamily:T.fontMono,fontSize:11,color:T.textMute}}>
+                SQL editor URL: <a href={sqlEditorUrl} target="_blank" rel="noreferrer" style={{color:T.green}}>{sqlEditorUrl}</a>
+              </div>
+            </>
+          ) : (
+            <div style={{fontFamily:T.fontMono,fontSize:12,color:T.red}}>
+              Supabase is not configured. Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in a root <code>.env</code> file and reload the app.
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 }
@@ -1534,6 +1605,7 @@ function Shell({onLogout}){
     ]},
     {section:t.system,items:[
       {id:"settings",icon:"⊕",label:t.navSettings},
+      {id:"sql-editor",icon:"≡",label:"SQL Editor",isNew:true},
       {id:"exports",icon:"⊞",label:t.navExports},
     ]},
   ];
@@ -1545,6 +1617,7 @@ function Shell({onLogout}){
     if(page==="reports")return <AIReportsPage/>;
     if(page==="credits")return <CarbonCreditsPage/>;
     if(page==="settings")return <SettingsPage/>;
+    if(page==="sql-editor")return <SqlEditorPage/>;
     return(
       <div className="gc-empty">
         <div className="gc-empty-icon">⊕</div>
