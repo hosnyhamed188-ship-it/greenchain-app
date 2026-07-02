@@ -10,6 +10,8 @@ create table if not exists public.settings (
   industry text,
   country text,
   phone text,
+  billing_email text,
+  plan_tier text,
   scope_target text,
   offset_budget text,
   email_alerts boolean default true,

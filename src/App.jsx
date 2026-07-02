@@ -29,7 +29,7 @@ const TR = {
     systemAccess:"System Access",gateway:"ZERO-TRUST ENTERPRISE GATEWAY",
     enterpriseId:"Enterprise ID",passkey:"Passkey",awaitHandshake:"Awaiting secure handshake...",
     initiateSession:"INITIATE SESSION",authenticating:"AUTHENTICATING...",
-    sso:"SSO via Azure AD / Okta / SAML 2.0",devBypass:"⚙ DEV BYPASS",
+    sso:"SSO via Azure AD / Okta / SAML 2.0",ssoUnavailable:"SSO login is not configured in this preview. Use enterprise credentials or DEV BYPASS.",devBypass:"⚙ DEV BYPASS",
     devMode:"DEVELOPER MODE · NOT FOR PRODUCTION",security:"AES-256 · TLS 1.3 · MFA ENFORCED · SOC 2 TYPE II",
     build:"GreenChain AI © 2025 · Build v4.12.3",networkHealth:"Network Health",allNominal:"ALL SYSTEMS NOMINAL",
     terminateSession:"TERMINATE SESSION",authenticated:"AUTHENTICATED",enterpriseDashboard:"Enterprise Dashboard",
@@ -741,6 +741,12 @@ const REPORT_TEMPLATES=[
   {icon:"🌿",name:"Net Zero Plan",desc:"Science-based targets"},
   {icon:"🏭",name:"Supplier Audit",desc:"Due diligence report"},
 ];
+
+const generateLocalReport = (template, prompt) => {
+  const promptNote = prompt ? ` Additional context: ${prompt}` : "";
+  return `Executive Summary — ${template}\n\nGreenChain AI has generated an executive summary for your enterprise based on current carbon management, compliance, and supplier risk data.${promptNote}\n\n1. Emissions Performance: Operational carbon intensity is trending toward the target, with priority reduction opportunities in Scope 1 energy use and Scope 2 purchased power.\n\n2. Regulatory Compliance: Current disclosures align with EU CBAM and SEC climate expectations, but supplier audit data requires validation for the next reporting window.\n\n3. Recommended Actions: Accelerate low-carbon sourcing, finalize offset budgeting, and deploy the enterprise compliance dashboard to stakeholders for real-time decision-making.\n\nThis summary is a generated preview; connect a valid Anthropic API key in VITE_ANTHROPIC_API_KEY to enable live AI-powered report generation.`;
+};
+
 const CARBON_MARKETS=[
   {type:"EU ETS",price:"$68.40",change:"+5.2%",vol:"12.4M t",up:true},
   {type:"Gold Standard",price:"$18.20",change:"+2.1%",vol:"3.8M t",up:true},
@@ -814,9 +820,22 @@ function useTokenAnim(run){
 
 function LangSwitcher({lang,setLang}){
   const [open,setOpen]=useState(false);
+  const ref=useRef(null);
   const cur=LANGS.find(l=>l.code===lang);
+
+  useEffect(()=>{
+    if(!open) return;
+    const handleOutside = (event) => {
+      if(ref.current && !ref.current.contains(event.target)){
+        setOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handleOutside);
+    return () => window.removeEventListener("mousedown", handleOutside);
+  },[open]);
+
   return(
-    <div style={{position:"relative"}}>
+    <div ref={ref} style={{position:"relative"}}>
       <div className={`lang-btn${open?" open":""}`} onClick={()=>setOpen(o=>!o)}>
         <span style={{fontSize:13}}>{cur.flag}</span>
         <span>{cur.label}</span>
@@ -845,9 +864,14 @@ function LoginPage({onLogin,lang,setLang}){
   const [pass,setPass]=useState("");
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
+  const [info,setInfo]=useState("");
   const token=useTokenAnim(loading);
   async function handleLogin(){
     if(!user||!pass) return;
+    if(!isSupabaseConfigured){
+      setError("Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env.");
+      return;
+    }
     setError("");
     setLoading(true);
     const {error} = await supabase.auth.signInWithPassword({
@@ -859,7 +883,7 @@ function LoginPage({onLogin,lang,setLang}){
       setError(error.message || "Login failed. Check credentials.");
       return;
     }
-    onLogin();
+    onLogin(true);
   }
   return(
     <div className="gc-login" dir={rtl?"rtl":"ltr"}>
@@ -898,11 +922,11 @@ function LoginPage({onLogin,lang,setLang}){
         <div style={{height:1,background:T.border,margin:"20px 0"}}/>
         <div className="gc-field">
           <label>{t.enterpriseId}</label>
-          <input value={user} onChange={e=>setUser(e.target.value)} placeholder="user@corporation.com" dir="ltr"/>
+          <input value={user} onChange={e=>setUser(e.target.value)} placeholder="user@corporation.com" dir="ltr" disabled={!isSupabaseConfigured}/>
         </div>
         <div className="gc-field">
           <label>{t.passkey}</label>
-          <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••••••" dir="ltr"/>
+          <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••••••" dir="ltr" disabled={!isSupabaseConfigured}/>
         </div>
         <div className="gc-token-display">
           {loading?<>{token}<span className="gc-token-cursor"/></>:<span style={{color:T.textMute}}>{t.awaitHandshake}</span>}
@@ -914,10 +938,16 @@ function LoginPage({onLogin,lang,setLang}){
           <div style={{marginTop:10,fontFamily:T.fontMono,fontSize:11,color:T.red}}>{error}</div>
         )}
         <div style={{marginTop:10}}>
-          <button className="gc-btn gc-btn-sec" onClick={()=>{}}>{t.sso}</button>
+          <button className="gc-btn gc-btn-sec" onClick={()=>{
+            setError("");
+            setInfo(t.ssoUnavailable || "SSO login is not configured in this preview. Use enterprise credentials or DEV BYPASS.");
+          }}>{t.sso}</button>
         </div>
+        {info && (
+          <div style={{marginTop:10,fontFamily:T.fontMono,fontSize:11,color:T.green}}>{info}</div>
+        )}
         <div style={{marginTop:10,borderTop:`1px dashed ${T.textMute}33`,paddingTop:10}}>
-          <button className="gc-btn gc-btn-dev" onClick={()=>onLogin()}>{t.devBypass}</button>
+          <button className="gc-btn gc-btn-dev" onClick={()=>onLogin(true)}>{t.devBypass}</button>
           <div style={{fontFamily:T.fontMono,fontSize:8,color:T.textMute,textAlign:"center",marginTop:6,letterSpacing:1}}>{t.devMode}</div>
         </div>
         <div className="gc-login-footer">
@@ -1263,29 +1293,36 @@ function AIReportsPage(){
   const [prompt,setPrompt]=useState("");
   const [status,setStatus]=useState("idle"); // idle | loading | done
   const [output,setOutput]=useState("");
+  const [reportError,setReportError]=useState("");
+  const anthropicKey = import.meta.env.VITE_ANTHROPIC_API_KEY?.trim();
 
   async function handleGenerate(){
     if(!selected)return;
+    setReportError("");
     setStatus("loading");
     setOutput("");
     const templateName=REPORT_TEMPLATES[selected]?.name||"ESG Report";
+    if(!anthropicKey){
+      setTimeout(()=>{
+        setOutput(generateLocalReport(templateName, prompt));
+        setStatus("done");
+      }, 700);
+      return;
+    }
     try{
       const res=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:{
+          "Content-Type":"application/json",
+          "Authorization":`Bearer ${anthropicKey}`,
+        },
         body:JSON.stringify({
           model:"claude-sonnet-4-6",
           max_tokens:1000,
           messages:[{
             role:"user",
             content:`You are GreenChain AI, an enterprise carbon management platform. Generate a professional executive summary for a ${templateName} for an industrial company.${prompt?` Additional context: ${prompt}`:""}
-            
-Format as a concise 3-paragraph executive report with:
-- Key findings and metrics
-- Regulatory compliance status  
-- Recommended action items
-
-Use professional corporate language. Include specific numbers where relevant. Keep it to 250-300 words.`
+            \n\nFormat as a concise 3-paragraph executive report with:\n- Key findings and metrics\n- Regulatory compliance status\n- Recommended action items\n\nUse professional corporate language. Include specific numbers where relevant. Keep it to 250-300 words.`
           }]
         })
       });
@@ -1294,9 +1331,21 @@ Use professional corporate language. Include specific numbers where relevant. Ke
       setOutput(text);
       setStatus("done");
     }catch{
-      setOutput("Error connecting to AI engine. Please check your network connection.");
+      setReportError("Error connecting to the AI engine. Please check your API key and network.");
       setStatus("done");
     }
+  }
+
+  function downloadReport(){
+    if(!output) return;
+    const filename = `greenchain-${REPORT_TEMPLATES[selected]?.name?.toLowerCase().replace(/[^a-z0-9]+/g,"-")||"report"}.txt`;
+    const blob = new Blob([output], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   return(
@@ -1347,6 +1396,11 @@ Use professional corporate language. Include specific numbers where relevant. Ke
           >
             {status==="loading"?t.reportStatus:t.generateReport}
           </button>
+          {!anthropicKey && (
+            <div style={{marginTop:10,fontFamily:T.fontMono,fontSize:10,color:T.amber}}>
+              Running in preview mode. Set <code>VITE_ANTHROPIC_API_KEY</code> to enable live report generation.
+            </div>
+          )}
         </div>
       </div>
       {(status==="loading"||status==="done")&&(
@@ -1354,17 +1408,27 @@ Use professional corporate language. Include specific numbers where relevant. Ke
           <div className="gc-panel-header">
             <span className="gc-panel-title">{t.aiAnalysis}</span>
             {status==="done"&&(
-              <button className="gc-vendor-action" style={{marginLeft:"auto"}}>
+              <button
+                className="gc-vendor-action"
+                style={{marginLeft:"auto"}}
+                onClick={downloadReport}
+                disabled={!output}
+              >
                 {t.reportDownload} ↓
               </button>
             )}
           </div>
           <div className="gc-panel-body">
+            {reportError && (
+              <div style={{marginBottom:12,fontFamily:T.fontMono,fontSize:11,color:T.red}}>
+                {reportError}
+              </div>
+            )}
             <div className={`gc-ai-output${status==="loading"?" loading":""}`}>
               {status==="loading"?(
                 <span style={{color:T.textMute}}>{t.reportStatus}</span>
               ):(
-                <span style={{whiteSpace:"pre-wrap",lineHeight:1.8}}>{output}</span>
+                <span style={{whiteSpace:"pre-wrap",lineHeight:1.8}}>{output || "No report generated yet."}</span>
               )}
             </div>
           </div>
@@ -1380,6 +1444,18 @@ const SettingsFormField=({label,field,placeholder,type="text",form,setForm})=>(
     <label>{label}</label>
     <input type={type} value={form[field]} placeholder={placeholder}
       onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}/>
+  </div>
+);
+
+const SettingsSelectField=({label,field,options,form,setForm})=>(
+  <div className="gc-field">
+    <label>{label}</label>
+    <select value={form[field]} onChange={e=>setForm(f=>({...f,[field]:e.target.value}))}
+      style={{width:"100%",background:T.bg,border:`1px solid ${T.border}`,color:T.textPri,fontFamily:T.fontMono,fontSize:12,padding:"9px 12px",outline:"none"}}>
+      {options.map(option=>(
+        <option key={option.value} value={option.value}>{option.label}</option>
+      ))}
+    </select>
   </div>
 );
 
@@ -1406,17 +1482,48 @@ const getSupabaseSqlEditorUrl = () => {
 };
 
 function SettingsPage(){
+  const {t}=useLang();
+  const localStorageKey = "gc-settings";
   const initialError = !isSupabaseConfigured
-    ? 'Supabase is not configured. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in a root .env file.'
+    ? 'Supabase is not configured. Settings will save locally until Supabase is configured.'
     : "";
   const [saving,setSaving]=useState(false);
   const [saved,setSaved]=useState(false);
   const [error,setError]=useState(initialError);
-  const [form,setForm]=useState({
-    companyName:"",industry:"",country:"",email:"",phone:"",
-    scopeTarget:"",offsetBudget:"",
-    emailAlerts:true,penaltyAlerts:true,reportReady:true,
+  const [info,setInfo]=useState(() => {
+    if(typeof window === "undefined") return "";
+    try {
+      const savedLocal = window.localStorage.getItem(localStorageKey);
+      return savedLocal ? 'Loaded local settings cache.' : "";
+    } catch {
+      return "";
+    }
   });
+  const [form,setForm]=useState(() => {
+    const baseForm = {
+      companyName:"",industry:"",country:"",email:"",phone:"",
+      billingEmail:"",planTier:"planStarter",
+      scopeTarget:"",offsetBudget:"",
+      emailAlerts:true,penaltyAlerts:true,reportReady:true,
+    };
+    if(typeof window === "undefined") return baseForm;
+    try {
+      const savedLocal = window.localStorage.getItem(localStorageKey);
+      return savedLocal ? {...baseForm, ...JSON.parse(savedLocal)} : baseForm;
+    } catch {
+      return baseForm;
+    }
+  });
+  useEffect(()=>{
+    if(!isSupabaseConfigured){
+      try{
+        window.localStorage.setItem(localStorageKey, JSON.stringify(form));
+      }catch(error){
+        console.warn("Unable to save settings locally:", error);
+      }
+    }
+  },[form]);
+
   useEffect(()=>{
     if(!isSupabaseConfigured) return;
     async function loadUserSettings(){
@@ -1448,6 +1555,7 @@ function SettingsPage(){
           penaltyAlerts:settings.penalty_alerts ?? f.penaltyAlerts,
           reportReady:settings.report_ready ?? f.reportReady,
         }));
+        setInfo('Loaded settings from Supabase.');
       } else if(settingsError){
         setError(settingsError.message || 'Unable to load saved settings.');
       }
@@ -1458,19 +1566,30 @@ function SettingsPage(){
     setSaving(true);
     setError("");
     if(!isSupabaseConfigured){
-      setError('Supabase is not configured. Unable to save settings.');
-      setSaving(false);
+      try{
+        window.localStorage.setItem(localStorageKey, JSON.stringify(form));
+        setInfo('Settings saved locally.');
+        setSaving(false);
+        setSaved(true);
+        setTimeout(()=>setSaved(false),3000);
+      } catch {
+        setError('Failed to save settings locally.');
+        setSaving(false);
+      }
       return;
     }
-    const {data:{user},error:userError} = await supabase.auth.getUser();
-    if(userError || !user){
+
+    const {data:{user:authUser},error:userError} = await supabase.auth.getUser();
+    if(userError || !authUser){
       setError('Unable to determine current user. Ensure Supabase auth is available.');
       setSaving(false);
       return;
     }
+
     const {error: upsertError} = await supabase.from("settings").upsert({
-      user_id:user.id,company_name:form.companyName,industry:form.industry,
-      country:form.country,phone:form.phone,scope_target:form.scopeTarget,
+      user_id:authUser.id,company_name:form.companyName,industry:form.industry,
+      country:form.country,phone:form.phone,billing_email:form.billingEmail,
+      plan_tier:form.planTier,scope_target:form.scopeTarget,
       offset_budget:form.offsetBudget,email_alerts:form.emailAlerts,
       penalty_alerts:form.penaltyAlerts,report_ready:form.reportReady,
     });
@@ -1479,6 +1598,7 @@ function SettingsPage(){
       setSaving(false);
       return;
     }
+    setInfo('Settings saved to Supabase.');
     setSaving(false);setSaved(true);setTimeout(()=>setSaved(false),3000);
   }
   return(
@@ -1500,6 +1620,7 @@ function SettingsPage(){
             <SettingsFormField label="Country / Region" field="country" placeholder="Germany — EU" form={form} setForm={setForm}/>
             <SettingsFormField label="Contact Email" field="email" placeholder="ops@company.com" type="email" form={form} setForm={setForm}/>
             <SettingsFormField label="Phone" field="phone" placeholder="+49 30 123456" form={form} setForm={setForm}/>
+                    <SettingsFormField label="Billing Email" field="billingEmail" placeholder="billing@company.com" type="email" form={form} setForm={setForm}/>
           </div>
         </div>
         <div className="gc-panel">
@@ -1510,6 +1631,13 @@ function SettingsPage(){
           <div className="gc-panel-body">
             <SettingsFormField label="Scope 1+2 Reduction Target (%)" field="scopeTarget" placeholder="e.g. 40" form={form} setForm={setForm}/>
             <SettingsFormField label="Annual Carbon Offset Budget ($)" field="offsetBudget" placeholder="e.g. 500000" form={form} setForm={setForm}/>
+            <SettingsSelectField
+              label="Subscription Plan"
+              field="planTier"
+              options={PLANS.map(plan=>({value:plan.key,label:plan.key === 'planCustom' ? 'Custom' : t[plan.key]}))}
+              form={form}
+              setForm={setForm}
+            />
             <div style={{marginTop:16,padding:14,background:T.panel,border:`1px solid ${T.border}`}}>
               <div style={{fontFamily:T.fontMono,fontSize:8,color:T.textMute,letterSpacing:2,marginBottom:10}}>TARGET PROGRESS</div>
               {[
@@ -1546,7 +1674,12 @@ function SettingsPage(){
           {error}
         </div>
       )}
-      <button className="gc-generate-btn" onClick={handleSave} disabled={saving || !!error || !isSupabaseConfigured} style={{maxWidth:400}}>
+      {info && (
+        <div style={{marginBottom:12,fontFamily:T.fontMono,fontSize:11,color:T.green}}>
+          {info}
+        </div>
+      )}
+      <button className="gc-generate-btn" onClick={handleSave} disabled={saving} style={{maxWidth:400}}>
         {saving?"SAVING...":(saved?"✓ SAVED SUCCESSFULLY":"SAVE CONFIGURATION")}
       </button>
     </>
@@ -1558,6 +1691,19 @@ function DiagnosticsPage(){
     isSupabaseConfigured ? "checking" : "disabled"
   );
   const [settingsError,setSettingsError]=useState("");
+  const [copyStatus,setCopyStatus]=useState("idle");
+  const sqlEditorUrl = getSupabaseSqlEditorUrl();
+
+  const handleCopyMigration = async () => {
+    try {
+      await navigator.clipboard.writeText(migrationSql);
+      setCopyStatus("copied");
+      setTimeout(()=>setCopyStatus("idle"),2000);
+    } catch {
+      setCopyStatus("error");
+      setTimeout(()=>setCopyStatus("idle"),2000);
+    }
+  };
 
   useEffect(()=>{
     if(!isSupabaseConfigured) return;
@@ -1594,7 +1740,7 @@ function DiagnosticsPage(){
           <div style={{padding:14,background:T.panel,border:`1px solid ${T.border}44`,borderRadius:8}}>
             <div style={{fontWeight:700,color:T.textPri,marginBottom:6}}>Settings Table Access</div>
             <div style={{fontFamily:T.fontMono,fontSize:11,color:T.textMute}}>
-              {settingsStatus === "unknown" && "Checking the settings table..."}
+              {settingsStatus === "checking" && "Checking the settings table..."}
               {settingsStatus === "ok" && "Settings table is reachable."}
               {settingsStatus === "error" && `Error: ${settingsError}`}
               {settingsStatus === "disabled" && "Supabase is not configured."}
@@ -1605,6 +1751,21 @@ function DiagnosticsPage(){
               If the settings table does not exist, run the migration script from the SQL Editor page or your Supabase SQL workspace.
             </div>
           )}
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginTop:10}}>
+            <button
+              className="gc-generate-btn"
+              onClick={()=>isSupabaseConfigured && window.open(sqlEditorUrl, "_blank")}
+              disabled={!isSupabaseConfigured}
+            >
+              Open SQL Editor
+            </button>
+            <button
+              className="gc-generate-btn"
+              onClick={handleCopyMigration}
+            >
+              {copyStatus === "copied" ? "COPIED" : copyStatus === "error" ? "COPY FAILED" : "Copy Migration Script"}
+            </button>
+          </div>
         </div>
       </div>
     </>
@@ -1622,6 +1783,15 @@ function SqlEditorPage(){
     } catch {
       setCopied(false);
     }
+  };
+  const handleDownload = () => {
+    const blob = new Blob([migrationSql], { type: "text/sql;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "migrate-settings-table.sql";
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
   return(
     <>
@@ -1642,6 +1812,7 @@ function SqlEditorPage(){
           <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
             <button className="gc-generate-btn" onClick={()=>window.open(sqlEditorUrl,"_blank")}>Open Supabase SQL Editor</button>
             <button className="gc-generate-btn" onClick={handleCopy}>{copied?"COPIED":"Copy Migration Script"}</button>
+            <button className="gc-generate-btn" onClick={handleDownload}>Download SQL Script</button>
           </div>
           <div style={{fontFamily:T.fontMono,fontSize:11,color:T.textMute,marginBottom:16}}>
             SQL editor URL: <a href={sqlEditorUrl} target="_blank" rel="noreferrer" style={{color:T.green}}>{sqlEditorUrl}</a>
@@ -1669,15 +1840,20 @@ function ExportsPage(){
     {name:"Carbon Credits Ledger",type:"CSV",created:"2026-06-24",size:"1.0 MB"},
   ];
 
-  const downloadCsv = async () => {
+  const downloadCsv = async (item = null) => {
     const headers = ["Report Name","Type","Created","Size"];
-    const rows = exportsList.map(item => [item.name,item.type,item.created,item.size].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(","));
+    const records = item ? [item] : exportsList;
+    const rows = records.map(record => [record.name,record.type,record.created,record.size]
+      .map(v=>`"${String(v).replace(/"/g,'""')}"`).join(","));
     const csv = [headers.join(","), ...rows].join("\r\n");
+    const filename = item
+      ? `${item.name.toLowerCase().replace(/[^a-z0-9]+/g,"-")}.csv`
+      : "greenchain-audit-exports.csv";
     const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "greenchain-audit-exports.csv";
+    anchor.download = filename;
     anchor.click();
     URL.revokeObjectURL(url);
     setStatus("downloaded");
@@ -1694,7 +1870,7 @@ function ExportsPage(){
       <div className="gc-panel" style={{marginBottom:16}}>
         <div className="gc-panel-header">
           <span className="gc-panel-title">Export Library</span>
-          <button className="gc-generate-btn" onClick={downloadCsv}>{status === "downloaded" ? "DOWNLOADED" : "EXPORT ALL CSV"}</button>
+          <button className="gc-generate-btn" onClick={()=>downloadCsv()}>{status === "downloaded" ? "DOWNLOADED" : "EXPORT ALL CSV"}</button>
         </div>
         <div className="gc-panel-body">
           <div style={{fontFamily:T.fontMono,fontSize:12,color:T.textMute,marginBottom:14}}>
@@ -1707,7 +1883,7 @@ function ExportsPage(){
                   <div style={{fontFamily:T.fontBody,fontSize:14,fontWeight:700,color:T.textPri}}>{item.name}</div>
                   <div style={{fontFamily:T.fontMono,fontSize:10,color:T.textMute,marginTop:4}}>{item.type} · {item.created} · {item.size}</div>
                 </div>
-                <button className="gc-generate-btn" onClick={downloadCsv}>Download</button>
+                <button className="gc-generate-btn" onClick={()=>downloadCsv(item)}>Download</button>
               </div>
             ))}
           </div>
@@ -1817,12 +1993,131 @@ function CarbonCreditsPage(){
   );
 }
 
+function SubscriptionPage(){
+  const {t}=useLang();
+  const [selected, setSelected] = useState("planGrowth");
+  const currentPlan = PLANS.find(plan => plan.key === selected) || PLANS[1];
+  return(
+    <>
+      <div className="gc-page-header">
+        <div className="gc-page-eyebrow">MODULE VIII · SUBSCRIPTION</div>
+        <div className="gc-page-title">Enterprise Subscription</div>
+        <div className="gc-page-meta">Choose the right plan for growth, compliance, and carbon trading.</div>
+      </div>
+      <div className="gc-panel" style={{marginBottom:16}}>
+        <div className="gc-panel-header">
+          <span className="gc-panel-title">Current Subscription</span>
+          <span className="gc-panel-badge">{currentPlan.key === 'planCustom' ? 'Custom' : t[currentPlan.key]}</span>
+        </div>
+        <div className="gc-panel-body" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{padding:14,background:T.panel,border:`1px solid ${T.border}44`,borderRadius:8}}>
+            <div style={{fontFamily:T.fontBody,fontSize:14,fontWeight:700,color:T.textPri,marginBottom:8}}>{currentPlan.key === 'planCustom' ? 'Custom Enterprise Agreement' : t[currentPlan.key]}</div>
+            <div style={{fontFamily:T.fontMono,fontSize:12,color:T.textMute,marginBottom:12}}>{currentPlan.price}{!currentPlan.noPrice && ` ${t.perMonth}`}</div>
+            <div style={{display:'grid',gap:8}}>
+              {currentPlan.features.map((feature,i)=>(
+                <div key={i} style={{fontFamily:T.fontMono,fontSize:10,color:T.textSec}}>{feature}</div>
+              ))}
+            </div>
+          </div>
+          <div style={{padding:14,background:T.surface,border:`1px solid ${T.border}`,borderRadius:8}}>
+            <div style={{fontFamily:T.fontMono,fontSize:9,letterSpacing:2,color:T.textMute,textTransform:'uppercase',marginBottom:10}}>Upgrade options</div>
+            <div style={{display:'grid',gap:10}}>
+              {PLANS.map(plan=>(
+                <button key={plan.key}
+                  className="gc-plan-cta"
+                  style={{background:selected === plan.key ? T.green : 'transparent',color:selected === plan.key ? '#000' : T.green,borderColor:selected === plan.key ? T.green : `${T.green}44`}}
+                  onClick={()=>setSelected(plan.key)}>
+                  {plan.noPrice ? 'Contact Sales' : (selected === plan.key ? 'Selected' : `Select ${t[plan.key]}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="gc-panel">
+        <div className="gc-panel-header">
+          <span className="gc-panel-title">Billing Benefits</span>
+          <span className="gc-panel-badge live">ON DEMAND</span>
+        </div>
+        <div className="gc-panel-body">
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12}}>
+            {[
+              {title:'AI Reports',desc:'Unlimited executive summaries and ESG disclosures.'},
+              {title:'Carbon Trading',desc:'Access to premium carbon credit dashboards and forecasts.'},
+              {title:'Compliance Ops',desc:'Audit-ready exports, regulatory workflows, and controls.'},
+            ].map((item,i)=>(
+              <div key={i} style={{padding:14,background:T.panel,border:`1px solid ${T.border}44`,borderRadius:8}}>
+                <div style={{fontFamily:T.fontBody,fontSize:12,fontWeight:700,color:T.textPri,marginBottom:6}}>{item.title}</div>
+                <div style={{fontFamily:T.fontMono,fontSize:10,color:T.textMute}}>{item.desc}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── SHELL ──────────────────────────────────────────────────────
-function Shell({onLogout}){
-  const [page,setPage]=useState("dashboard");
-  const [lang,setLang]=useState("en");
+function Shell({onLogout, lang, setLang}){
+  const [page,setPage]=useState(() => {
+    try {
+      const hash = window.location.hash.slice(1);
+      if(hash) return hash;
+      return window.localStorage.getItem("gc-page") || "dashboard";
+    } catch {
+      return "dashboard";
+    }
+  });
+  const [user,setUser]=useState(null);
   const t=TR[lang]||TR.en;
   const rtl=LANGS.find(l=>l.code===lang)?.rtl||false;
+
+  useEffect(()=>{
+    if(!isSupabaseConfigured) return;
+
+    const loadUser = async () => {
+      const {data} = await supabase.auth.getUser();
+      if(data?.user) setUser(data.user);
+    };
+
+    loadUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if(session?.user){
+        setUser(session.user);
+      } else {
+        setUser(null);
+      }
+    });
+
+    return () => subscription?.unsubscribe();
+  },[]);
+
+  useEffect(()=>{
+    try {
+      window.history.replaceState(null, "", `#${page}`);
+      window.localStorage.setItem("gc-page", page);
+    } catch {
+      // ignore storage write errors
+    }
+  },[page]);
+
+  useEffect(()=>{
+    const updatePageFromHash = () => {
+      try {
+        const hash = window.location.hash.slice(1);
+        if(hash && hash !== page){
+          setPage(hash);
+        }
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    window.addEventListener("hashchange", updatePageFromHash);
+    return () => window.removeEventListener("hashchange", updatePageFromHash);
+  },[page]);
 
   const NAV=[
     {section:t.coreModules,items:[
@@ -1841,7 +2136,26 @@ function Shell({onLogout}){
       {id:"diagnostics",icon:"⚕",label:"Diagnostics"},
       {id:"exports",icon:"⊞",label:t.navExports},
     ]},
+    {section:t.commerce,items:[
+      {id:"subscription",icon:"☑",label:"Subscription",isNew:true},
+    ]},
   ];
+
+  const pageNames = {
+    dashboard: t.navDashboard,
+    compliance: t.navCompliance,
+    optimizer: t.navOptimizer,
+    sourcing: t.navSourcing,
+    reports: t.navReports,
+    credits: t.navCredits,
+    settings: t.navSettings,
+    "sql-editor": "SQL Editor",
+    diagnostics: "Diagnostics",
+    exports: t.navExports,
+    subscription: "Subscription",
+  };
+
+  const activePageTitle = pageNames[page] || t.moduleUnderConstruction;
 
   function renderPage(){
     if(page==="dashboard")return <DashboardPage/>;
@@ -1854,6 +2168,7 @@ function Shell({onLogout}){
     if(page==="sql-editor")return <SqlEditorPage/>;
     if(page==="diagnostics")return <DiagnosticsPage/>;
     if(page==="exports")return <ExportsPage/>;
+    if(page==="subscription")return <SubscriptionPage/>;
     return(
       <div className="gc-empty">
         <div className="gc-empty-icon">⊕</div>
@@ -1883,16 +2198,21 @@ function Shell({onLogout}){
               <div key={group.section}>
                 <div className="gc-nav-section">{group.section}</div>
                 {group.items.map(item=>(
-                  <div
+                  <a
                     key={item.id}
                     className={`gc-nav-item${page===item.id?" active":""}`}
-                    onClick={()=>setPage(item.id)}
+                    href={`#${item.id}`}
+                    onClick={(event)=>{
+                      event.preventDefault();
+                      setPage(item.id);
+                    }}
+                    style={{textDecoration:"none",color:"inherit"}}
                   >
                     <span className="gc-nav-icon">{item.icon}</span>
                     <span>{item.label}</span>
                     {item.badge&&<span className="gc-nav-badge">{item.badge}</span>}
                     {item.isNew&&<span className="gc-nav-new">NEW</span>}
-                  </div>
+                  </a>
                 ))}
               </div>
             ))}
@@ -1910,11 +2230,14 @@ function Shell({onLogout}){
         </div>
         <div className="gc-main">
           <div className="gc-topbar">
-            <div className="gc-topbar-left">
+            <div className="gc-topbar-left" style={{display:"flex",alignItems:"center",gap:10}}>
               <span>{t.appName}</span>
               <span style={{color:T.textMute,fontSize:9}}>›</span>
-              <span className="gc-topbar-crumb">{t.enterpriseDashboard}</span>
+              <span className="gc-topbar-crumb">{activePageTitle}</span>
               <span className="gc-auth-pill">{t.authenticated}</span>
+              {user?.email && (
+                <span style={{fontFamily:T.fontMono,fontSize:9,color:T.textMute,marginLeft:12}}>{user.email}</span>
+              )}
             </div>
             <div className="gc-topbar-right">
               <LangSwitcher lang={lang} setLang={setLang}/>
@@ -1938,23 +2261,62 @@ function Shell({onLogout}){
 // ── ROOT ───────────────────────────────────────────────────────
 export default function GreenChainApp(){
   const [screen,setScreen]=useState("login");
-  const [lang,setLang]=useState("en");
+  const [lang,setLang]=useState(() => {
+    try {
+      return window.localStorage.getItem("gc-lang") || "en";
+    } catch {
+      return "en";
+    }
+  });
   const t=TR[lang]||TR.en;
   const rtl=LANGS.find(l=>l.code===lang)?.rtl||false;
 
   useEffect(()=>{
+    try {
+      window.localStorage.setItem("gc-lang", lang);
+    } catch {
+      // ignore storage errors
+    }
+  },[lang]);
+
+  useEffect(()=>{
     if(!isSupabaseConfigured) return;
-    supabase.auth.getUser().then(({data})=>{
+
+    const checkUser = async () => {
+      const {data} = await supabase.auth.getUser();
       if(data?.user){
         setScreen("app");
       }
+    };
+
+    checkUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if(session?.user){
+        setScreen("app");
+      } else {
+        setScreen("login");
+      }
     });
+
+    return () => subscription?.unsubscribe();
   },[]);
 
-  async function handleLogin(){
+  async function handleLogin(success=false){
+    if(success || !isSupabaseConfigured){
+      setScreen("app");
+      return;
+    }
     setScreen("loading");
     setTimeout(()=>setScreen("app"),1600);
   }
+
+  const handleLogout = async () => {
+    if(isSupabaseConfigured){
+      await supabase.auth.signOut();
+    }
+    setScreen("login");
+  };
 
   return(
     <>
@@ -1973,7 +2335,7 @@ export default function GreenChainApp(){
         </div>
       )}
       {screen==="app"&&(
-        <Shell onLogout={()=>setScreen("login")}/>
+        <Shell onLogout={handleLogout} lang={lang} setLang={setLang}/>
       )}
     </>
   );
