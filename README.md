@@ -16,6 +16,7 @@ Built with React, Vite, Supabase, and Framer Motion.
 ## Features
 
 - **Settings**: manage enterprise configuration and notification preferences
+- **SQL Editor**: open your Supabase SQL workspace and copy the settings-table migration script
 - **Compliance**: review live compliance controls and audit status
 - **Exports**: create and manage secure audit exports
 - **AI Reports**: generate intelligent ESG and regulatory insights

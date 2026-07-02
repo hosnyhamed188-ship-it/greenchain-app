@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, createContext, useContext, useMemo } from "react";
 import { supabase, isSupabaseConfigured } from './supabase.js'
+import migrationSql from '../migrate-settings-table.sql?raw'
 // ── THEME ──────────────────────────────────────────────────────
 const T = {
   bg:"#060d0a",surface:"#0a1510",panel:"#0d1a13",border:"#162a1e",borderHi:"#1e4a30",
@@ -1450,7 +1451,17 @@ function SettingsPage(){
 }
 
 function SqlEditorPage(){
+  const [copied,setCopied]=useState(false);
   const sqlEditorUrl = getSupabaseSqlEditorUrl();
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(migrationSql);
+      setCopied(true);
+      setTimeout(()=>setCopied(false),2000);
+    } catch {
+      setCopied(false);
+    }
+  };
   return(
     <>
       <div className="gc-page-header">
@@ -1464,18 +1475,21 @@ function SqlEditorPage(){
           <span className="gc-panel-badge">{isSupabaseConfigured?"CONNECTED":"DISABLED"}</span>
         </div>
         <div className="gc-panel-body">
-          {isSupabaseConfigured ? (
-            <>
-              <div style={{fontFamily:T.fontMono,fontSize:12,color:T.textMute,marginBottom:18}}>
-                Use the Supabase SQL editor to run schema migrations such as <code>migrate-settings-table.sql</code>. This page provides quick access to your project SQL workspace.
-              </div>
-              <button className="gc-generate-btn" onClick={()=>window.open(sqlEditorUrl,"_blank")}>Open Supabase SQL Editor</button>
-              <div style={{marginTop:16,fontFamily:T.fontMono,fontSize:11,color:T.textMute}}>
-                SQL editor URL: <a href={sqlEditorUrl} target="_blank" rel="noreferrer" style={{color:T.green}}>{sqlEditorUrl}</a>
-              </div>
-            </>
-          ) : (
-            <div style={{fontFamily:T.fontMono,fontSize:12,color:T.red}}>
+          <div style={{fontFamily:T.fontMono,fontSize:12,color:T.textMute,marginBottom:18}}>
+            Use the Supabase SQL editor to run schema migrations such as <code>migrate-settings-table.sql</code>. This page provides quick access to your project SQL workspace.
+          </div>
+          <div style={{display:"flex",gap:12,flexWrap:"wrap",marginBottom:20}}>
+            <button className="gc-generate-btn" onClick={()=>window.open(sqlEditorUrl,"_blank")}>Open Supabase SQL Editor</button>
+            <button className="gc-generate-btn" onClick={handleCopy}>{copied?"COPIED":"Copy Migration Script"}</button>
+          </div>
+          <div style={{fontFamily:T.fontMono,fontSize:11,color:T.textMute,marginBottom:16}}>
+            SQL editor URL: <a href={sqlEditorUrl} target="_blank" rel="noreferrer" style={{color:T.green}}>{sqlEditorUrl}</a>
+          </div>
+          <div style={{background:T.panel,border:`1px solid ${T.border}44`,borderRadius:8,padding:14,overflowX:"auto"}}>
+            <pre style={{whiteSpace:"pre-wrap",wordBreak:"break-word",fontFamily:T.fontMono,fontSize:11,margin:0,color:T.textPri}}>{migrationSql}</pre>
+          </div>
+          {!isSupabaseConfigured && (
+            <div style={{marginTop:16,fontFamily:T.fontMono,fontSize:12,color:T.red}}>
               Supabase is not configured. Set <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_ANON_KEY</code> in a root <code>.env</code> file and reload the app.
             </div>
           )}
