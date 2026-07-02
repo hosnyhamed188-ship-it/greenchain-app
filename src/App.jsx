@@ -844,8 +844,23 @@ function LoginPage({onLogin,lang,setLang}){
   const [user,setUser]=useState("");
   const [pass,setPass]=useState("");
   const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
   const token=useTokenAnim(loading);
-  function handleLogin(){if(!user||!pass)return;setLoading(true);setTimeout(()=>onLogin(),2400);}
+  async function handleLogin(){
+    if(!user||!pass) return;
+    setError("");
+    setLoading(true);
+    const {error} = await supabase.auth.signInWithPassword({
+      email:user,
+      password:pass,
+    });
+    setLoading(false);
+    if(error){
+      setError(error.message || "Login failed. Check credentials.");
+      return;
+    }
+    onLogin();
+  }
   return(
     <div className="gc-login" dir={rtl?"rtl":"ltr"}>
       <div className="gc-login-void">
@@ -895,6 +910,9 @@ function LoginPage({onLogin,lang,setLang}){
         <button className="gc-btn" onClick={handleLogin} disabled={!user||!pass||loading}>
           {loading?t.authenticating:t.initiateSession}
         </button>
+        {error&&(
+          <div style={{marginTop:10,fontFamily:T.fontMono,fontSize:11,color:T.red}}>{error}</div>
+        )}
         <div style={{marginTop:10}}>
           <button className="gc-btn gc-btn-sec" onClick={()=>{}}>{t.sso}</button>
         </div>
@@ -1924,7 +1942,16 @@ export default function GreenChainApp(){
   const t=TR[lang]||TR.en;
   const rtl=LANGS.find(l=>l.code===lang)?.rtl||false;
 
-  function handleLogin(){
+  useEffect(()=>{
+    if(!isSupabaseConfigured) return;
+    supabase.auth.getUser().then(({data})=>{
+      if(data?.user){
+        setScreen("app");
+      }
+    });
+  },[]);
+
+  async function handleLogin(){
     setScreen("loading");
     setTimeout(()=>setScreen("app"),1600);
   }
