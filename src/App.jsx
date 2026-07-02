@@ -1343,13 +1343,40 @@ function SettingsPage(){
   });
   useEffect(()=>{
     if(!isSupabaseConfigured) return;
-    supabase.auth.getUser().then(({data,error})=>{
+    async function loadUserSettings(){
+      const {data,error} = await supabase.auth.getUser();
       if(error || !data?.user){
         setError('Supabase auth is unavailable. Ensure a user session exists or configure auth.');
         return;
       }
-      if(data.user.email) setForm(f=>({...f,email:data.user.email}));
-    });
+      setForm(f=>({
+        ...f,
+        email:data.user.email || f.email,
+      }));
+
+      const {data:settings,error:settingsError} = await supabase.from("settings")
+        .select("company_name,industry,country,phone,scope_target,offset_budget,email_alerts,penalty_alerts,report_ready")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+
+      if(settings){
+        setForm(f=>({
+          ...f,
+          companyName:settings.company_name || f.companyName,
+          industry:settings.industry || f.industry,
+          country:settings.country || f.country,
+          phone:settings.phone || f.phone,
+          scopeTarget:settings.scope_target || f.scopeTarget,
+          offsetBudget:settings.offset_budget || f.offsetBudget,
+          emailAlerts:settings.email_alerts ?? f.emailAlerts,
+          penaltyAlerts:settings.penalty_alerts ?? f.penaltyAlerts,
+          reportReady:settings.report_ready ?? f.reportReady,
+        }));
+      } else if(settingsError){
+        setError(settingsError.message || 'Unable to load saved settings.');
+      }
+    }
+    loadUserSettings();
   },[]);
   async function handleSave(){
     setSaving(true);
