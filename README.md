@@ -118,6 +118,23 @@ npm run preview
 
 ---
 
+## Database Migration
+
+If you need to create or update the `settings` table in Supabase, use the included migration script:
+
+```bash
+# Run this in Supabase SQL Editor or via your preferred SQL migration workflow
+cat migrate-settings-table.sql
+```
+
+This script will:
+- create the `public.settings` table if it does not exist
+- add required columns for the Settings page
+- enable row-level security
+- create the `Users manage own settings` policy
+
+---
+
 ## Project Structure
 
 - `src/` — main React source code
