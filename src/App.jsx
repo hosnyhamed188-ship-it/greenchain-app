@@ -1450,6 +1450,64 @@ function SettingsPage(){
   );
 }
 
+function DiagnosticsPage(){
+  const [settingsStatus,setSettingsStatus]=useState(
+    isSupabaseConfigured ? "checking" : "disabled"
+  );
+  const [settingsError,setSettingsError]=useState("");
+
+  useEffect(()=>{
+    if(!isSupabaseConfigured) return;
+    supabase.from("settings").select("id").limit(1).then(({error})=>{
+      if(error){
+        setSettingsStatus("error");
+        setSettingsError(error.message || "Unable to query settings table.");
+      } else {
+        setSettingsStatus("ok");
+      }
+    });
+  },[]);
+
+  return(
+    <>
+      <div className="gc-page-header">
+        <div className="gc-page-eyebrow">MODULE VII · DIAGNOSTICS</div>
+        <div className="gc-page-title">Supabase Health Check</div>
+        <div className="gc-page-meta">Verify Supabase configuration and the `settings` table availability.</div>
+      </div>
+      <div className="gc-panel">
+        <div className="gc-panel-header">
+          <span className="gc-panel-title">Configuration Status</span>
+          <span className="gc-panel-badge">{isSupabaseConfigured?"Configured":"Missing"}</span>
+        </div>
+        <div className="gc-panel-body" style={{display:"grid",gap:12}}>
+          <div style={{fontFamily:T.fontMono,fontSize:12,color:T.textMute}}>
+            This page checks whether the Supabase client is configured and whether the `settings` table is reachable.
+          </div>
+          <div style={{padding:14,background:T.panel,border:`1px solid ${T.border}44`,borderRadius:8}}>
+            <div style={{fontWeight:700,color:T.textPri,marginBottom:6}}>Supabase Configuration</div>
+            <div style={{fontFamily:T.fontMono,fontSize:11,color:T.textMute}}>{isSupabaseConfigured ? "VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set." : "Missing required environment variables."}</div>
+          </div>
+          <div style={{padding:14,background:T.panel,border:`1px solid ${T.border}44`,borderRadius:8}}>
+            <div style={{fontWeight:700,color:T.textPri,marginBottom:6}}>Settings Table Access</div>
+            <div style={{fontFamily:T.fontMono,fontSize:11,color:T.textMute}}>
+              {settingsStatus === "unknown" && "Checking the settings table..."}
+              {settingsStatus === "ok" && "Settings table is reachable."}
+              {settingsStatus === "error" && `Error: ${settingsError}`}
+              {settingsStatus === "disabled" && "Supabase is not configured."}
+            </div>
+          </div>
+          {settingsStatus === "error" && (
+            <div style={{padding:14,background:T.red+"11",border:`1px solid ${T.red}55`,borderRadius:8,color:T.red,fontFamily:T.fontMono,fontSize:11}}>
+              If the settings table does not exist, run the migration script from the SQL Editor page or your Supabase SQL workspace.
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 function SqlEditorPage(){
   const [copied,setCopied]=useState(false);
   const sqlEditorUrl = getSupabaseSqlEditorUrl();
@@ -1620,6 +1678,7 @@ function Shell({onLogout}){
     {section:t.system,items:[
       {id:"settings",icon:"⊕",label:t.navSettings},
       {id:"sql-editor",icon:"≡",label:"SQL Editor",isNew:true},
+      {id:"diagnostics",icon:"⚕",label:"Diagnostics"},
       {id:"exports",icon:"⊞",label:t.navExports},
     ]},
   ];
@@ -1632,6 +1691,7 @@ function Shell({onLogout}){
     if(page==="credits")return <CarbonCreditsPage/>;
     if(page==="settings")return <SettingsPage/>;
     if(page==="sql-editor")return <SqlEditorPage/>;
+    if(page==="diagnostics")return <DiagnosticsPage/>;
     return(
       <div className="gc-empty">
         <div className="gc-empty-icon">⊕</div>
