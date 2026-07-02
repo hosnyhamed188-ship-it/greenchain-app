@@ -1022,6 +1022,64 @@ function DashboardPage(){
   );
 }
 
+function CompliancePage(){
+  const {t}=useLang();
+  const controls = [
+    {label:"Supplier Audit",status:"Active",risk:"Low"},
+    {label:"Emission Reporting",status:"Pending",risk:"Medium"},
+    {label:"Regulatory Filing",status:"On Track",risk:"Low"},
+  ];
+  return(
+    <>
+      <div className="gc-page-header">
+        <div className="gc-page-eyebrow">MODULE II · COMPLIANCE</div>
+        <div className="gc-page-title">Compliance Core</div>
+        <div className="gc-page-meta">Track regulatory controls, audit readiness, and compliance risk.</div>
+      </div>
+      <div className="gc-panel" style={{marginBottom:16}}>
+        <div className="gc-panel-header">
+          <span className="gc-panel-title">Control Dashboard</span>
+          <span className="gc-panel-badge live">{t.activeItems}</span>
+        </div>
+        <div className="gc-panel-body">
+          <div className="gc-grid-3">
+            {controls.map((item,i)=>(
+              <div key={i} className="gc-panel" style={{padding:14}}>
+                <div style={{fontFamily:T.fontBody,fontSize:15,fontWeight:700,color:T.textPri,marginBottom:6}}>{item.label}</div>
+                <div style={{fontFamily:T.fontMono,fontSize:11,color:T.textMute,marginBottom:10}}>Status: {item.status}</div>
+                <div style={{display:"flex",justifyContent:"space-between",fontFamily:T.fontMono,fontSize:11}}>
+                  <span>Risk</span><strong>{item.risk}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+      <div className="gc-panel">
+        <div className="gc-panel-header">
+          <span className="gc-panel-title">Recent Audit Findings</span>
+          <span className="gc-panel-badge">3 Open</span>
+        </div>
+        <div className="gc-panel-body">
+          <div style={{display:"grid",gap:12}}>
+            {[
+              {issue:"Supplier compliance gap",detail:"Vendor documentation overdue",severity:"High"},
+              {issue:"Emissions audit preparation",detail:"Data validation required",severity:"Medium"},
+              {issue:"Policy review",detail:"Sustainability policy update pending",severity:"Low"},
+            ].map((item,i)=>(
+              <div key={i} style={{padding:14,background:T.panel,border:`1px solid ${T.border}44`,borderRadius:8}}>
+                <div style={{fontFamily:T.fontBody,fontSize:13,fontWeight:700,color:T.textPri}}>{item.issue}</div>
+                <div style={{fontFamily:T.fontMono,fontSize:11,color:T.textMute,marginTop:6}}>{item.detail}</div>
+                <div style={{marginTop:10,fontFamily:T.fontMono,fontSize:10,color:T.textPri}}>{item.severity} severity</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── OPTIMIZER PAGE ─────────────────────────────────────────────
 function OptimizerPage(){
   const {t}=useLang();
@@ -1584,6 +1642,63 @@ function SqlEditorPage(){
   );
 }
 
+function ExportsPage(){
+  const [status,setStatus] = useState("ready");
+
+  const exportsList = [
+    {name:"Enterprise Audit Report",type:"CSV",created:"2026-07-01",size:"1.2 MB"},
+    {name:"Compliance Snapshot",type:"CSV",created:"2026-06-28",size:"860 KB"},
+    {name:"Carbon Credits Ledger",type:"CSV",created:"2026-06-24",size:"1.0 MB"},
+  ];
+
+  const downloadCsv = async () => {
+    const headers = ["Report Name","Type","Created","Size"];
+    const rows = exportsList.map(item => [item.name,item.type,item.created,item.size].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(","));
+    const csv = [headers.join(","), ...rows].join("\r\n");
+    const blob = new Blob([csv], {type:"text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "greenchain-audit-exports.csv";
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setStatus("downloaded");
+    setTimeout(()=>setStatus("ready"),2000);
+  };
+
+  return(
+    <>
+      <div className="gc-page-header">
+        <div className="gc-page-eyebrow">MODULE VI · AUDIT</div>
+        <div className="gc-page-title">Audit Exports</div>
+        <div className="gc-page-meta">Generate compliance and analytics exports for review and reporting.</div>
+      </div>
+      <div className="gc-panel" style={{marginBottom:16}}>
+        <div className="gc-panel-header">
+          <span className="gc-panel-title">Export Library</span>
+          <button className="gc-generate-btn" onClick={downloadCsv}>{status === "downloaded" ? "DOWNLOADED" : "EXPORT ALL CSV"}</button>
+        </div>
+        <div className="gc-panel-body">
+          <div style={{fontFamily:T.fontMono,fontSize:12,color:T.textMute,marginBottom:14}}>
+            Export ready reports for audit, compliance, and carbon accounting. CSV files are generated locally in your browser.
+          </div>
+          <div style={{display:"grid",gap:12}}>
+            {exportsList.map((item,i)=>(
+              <div key={i} style={{padding:14,background:T.panel,border:`1px solid ${T.border}44`,borderRadius:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{fontFamily:T.fontBody,fontSize:14,fontWeight:700,color:T.textPri}}>{item.name}</div>
+                  <div style={{fontFamily:T.fontMono,fontSize:10,color:T.textMute,marginTop:4}}>{item.type} · {item.created} · {item.size}</div>
+                </div>
+                <button className="gc-generate-btn" onClick={downloadCsv}>Download</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── CARBON CREDITS PAGE ────────────────────────────────────────
 function CarbonCreditsPage(){
   const {t}=useLang();
@@ -1712,6 +1827,7 @@ function Shell({onLogout}){
 
   function renderPage(){
     if(page==="dashboard")return <DashboardPage/>;
+    if(page==="compliance")return <CompliancePage/>;
     if(page==="optimizer")return <OptimizerPage/>;
     if(page==="sourcing")return <SourcingPage/>;
     if(page==="reports")return <AIReportsPage/>;
@@ -1719,6 +1835,7 @@ function Shell({onLogout}){
     if(page==="settings")return <SettingsPage/>;
     if(page==="sql-editor")return <SqlEditorPage/>;
     if(page==="diagnostics")return <DiagnosticsPage/>;
+    if(page==="exports")return <ExportsPage/>;
     return(
       <div className="gc-empty">
         <div className="gc-empty-icon">⊕</div>
